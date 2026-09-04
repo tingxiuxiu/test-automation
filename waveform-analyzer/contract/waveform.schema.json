@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "waveform.schema.json",
+  "title": "Waveform JSON",
+  "type": "object",
+  "required": ["sampleCount", "samplingRate"],
+  "additionalProperties": true,
+  "properties": {
+    "sampleCount": { "type": "integer", "minimum": 1 },
+    "samplingRate": { "type": "number", "exclusiveMinimum": 0 },
+    "units": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "channels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "group"],
+        "properties": {
+          "id": { "type": "string" },
+          "group": { "type": "string" },
+          "pairId": { "type": ["string", "null"] },
+          "unit": { "type": "string" }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["channel", "expected", "actual"],
+        "properties": {
+          "channel": { "type": "string" },
+          "expected": { "type": "integer" },
+          "actual": { "type": "integer" },
+          "message": { "type": "string" }
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "properties": {
+        "full": { "type": "object" }
+      }
+    },
+    "voltage": {
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": ["number", "null"] } }
+    },
+    "current": {
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": ["number", "null"] } }
+    },
+    "motor": {
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": ["number", "null"] } }
+    }
+  }
+}
