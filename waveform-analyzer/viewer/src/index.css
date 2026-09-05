@@ -431,43 +431,47 @@ input:focus-visible {
   inset: 0;
 }
 
-.plot-canvas > div {
-  width: 100% !important;
-  height: 100% !important;
+.plot-canvas canvas {
+  max-width: none;
 }
 
-.plot-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
+.plot-canvas .uplot,
+.plot-canvas .u-wrap {
+  pointer-events: none;
+}
+
+.plot-canvas .u-over {
+  pointer-events: auto;
   touch-action: none;
   user-select: none;
 }
 
-.plot-overlay[data-tool="box"] {
+.plot-canvas .u-over[data-tool="box"] {
   cursor: crosshair;
 }
 
-.plot-overlay[data-tool="pan"] {
+.plot-canvas .u-over[data-tool="pan"] {
   cursor: grab;
 }
 
-.plot-overlay[data-tool="pan"]:active {
+.plot-canvas .u-over[data-tool="pan"]:active {
   cursor: grabbing;
 }
 
-.plot-overlay[data-tool="cursor"] {
+.plot-canvas .u-over[data-tool="cursor"] {
   cursor: col-resize;
 }
 
-.box-select {
-  pointer-events: none;
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  z-index: 3;
+.plot-canvas .u-select {
   background: var(--action-fill);
   border: 1px solid var(--action);
+}
+
+.plot-layer {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
 }
 
 .side-panel {

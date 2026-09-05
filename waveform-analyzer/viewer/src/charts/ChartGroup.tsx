@@ -1,17 +1,13 @@
 import { useEffect, useRef, useState } from "react"
-import { init, use } from "echarts/core"
-import { LineChart } from "echarts/charts"
-import { GridComponent } from "echarts/components"
-import { CanvasRenderer } from "echarts/renderers"
-import type { ECharts } from "echarts/core"
-import { indexAtFrac, panRange, boxZoom, zoomAt } from "../waveform/viewRange"
+import { createPortal, flushSync } from "react-dom"
+import uPlot from "uplot"
+import "uplot/dist/uPlot.min.css"
+import { indexAtTime, panRange, rangeFromTimes, zoomAt } from "../waveform/viewRange"
 import { useWaveformStore } from "../waveform/store"
 import type { NormalizedWaveform } from "../waveform/normalize"
 import { buildChartModel } from "./chartModel"
-import { chartOption } from "./echartsOption"
+import { clearSelect, plotX, posOfSample, setSelectX, timeAtClientX, toAligned, uplotOptions } from "./uplotOption"
 import { channelColor, channelFill, type ColorScheme } from "../theme"
-
-use([LineChart, GridComponent, CanvasRenderer])
 
 type Props = {
   group: string
@@ -21,7 +17,7 @@ type Props = {
 
 type Drag = {
   clientX0: number
-  fracX0: number
+  plotX0: number
   panAcc: number
   cursorTarget: "A" | "B" | null
 }
@@ -33,7 +29,7 @@ function pickCursorTarget(a: number | null, b: number | null, idx: number): "A" 
 }
 
 function ChannelReadouts({
-  leftPct,
+  leftPx,
   frac,
   index,
   ids,
@@ -43,7 +39,7 @@ function ChannelReadouts({
   preferLeft,
   scheme,
 }: {
-  leftPct: string
+  leftPx: number
   frac: number
   index: number
   ids: string[]
@@ -59,7 +55,7 @@ function ChannelReadouts({
       className="channel-readouts"
       data-tag={tag ?? "hover"}
       style={{
-        left: leftPct,
+        left: leftPx,
         transform: goLeft ? "translateX(calc(-100% - 8px))" : "translateX(8px)",
       }}
     >
@@ -83,10 +79,12 @@ function ChannelReadouts({
 
 export function ChartGroup({ group, data, visible }: Props) {
   const canvasRef = useRef<HTMLDivElement>(null)
-  const overlayRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<ECharts | null>(null)
+  const plotRef = useRef<uPlot | null>(null)
+  const seriesKeyRef = useRef("")
   const dragRef = useRef<Drag | null>(null)
-  const [box, setBox] = useState<{ left: number; width: number } | null>(null)
+  const eventsRef = useRef<AbortController | null>(null)
+  const [over, setOver] = useState<HTMLDivElement | null>(null)
+  const [, setPlotGen] = useState(0)
 
   const view = useWaveformStore((s) => s.view)
   const yFollow = useWaveformStore((s) => s.yFollow)
@@ -100,200 +98,235 @@ export function ChartGroup({ group, data, visible }: Props) {
   useEffect(() => {
     const el = canvasRef.current
     if (!el) return
-    const chart = init(el, undefined, { renderer: "canvas", useDirtyRect: true })
-    chartRef.current = chart
-    const ro = new ResizeObserver(() => {
-      chart.resize()
-    })
+
+    const attach = (plot: uPlot) => {
+      eventsRef.current?.abort()
+      const ac = new AbortController()
+      eventsRef.current = ac
+      const { signal } = ac
+      const hit = plot.over
+      const fs = data.samplingRate
+      const n = data.sampleCount
+
+      const idxAt = (clientX: number) => indexAtTime(timeAtClientX(plot, clientX), fs, n)
+
+      const endDrag = () => {
+        clearSelect(plot)
+        dragRef.current = null
+      }
+
+      hit.addEventListener(
+        "pointerdown",
+        (ev: PointerEvent) => {
+          if (ev.button !== 0) return
+          ev.preventDefault()
+          const st = useWaveformStore.getState()
+          const x = plotX(plot, ev.clientX)
+          const drag: Drag = { clientX0: ev.clientX, plotX0: x, panAcc: 0, cursorTarget: null }
+          if (st.data) st.setHoverIndex(idxAt(ev.clientX))
+          if (st.tool === "pan") st.snapshotView()
+          if (st.tool === "cursor") {
+            const idx = idxAt(ev.clientX)
+            drag.cursorTarget = pickCursorTarget(st.cursorA, st.cursorB, idx)
+            if (drag.cursorTarget === "A") st.setCursorA(idx)
+            else st.setCursorB(idx)
+            st.setHoverIndex(idx)
+          }
+          dragRef.current = drag
+          try {
+            hit.setPointerCapture(ev.pointerId)
+          } catch {
+            /* already captured */
+          }
+        },
+        { signal, capture: true },
+      )
+
+      hit.addEventListener(
+        "pointermove",
+        (ev: PointerEvent) => {
+          const st = useWaveformStore.getState()
+          if (st.data) {
+            const idx = idxAt(ev.clientX)
+            st.setHoverIndex(idx)
+            const start = dragRef.current
+            if (st.tool === "cursor" && start?.cursorTarget === "A") st.setCursorA(idx)
+            else if (st.tool === "cursor" && start?.cursorTarget === "B") st.setCursorB(idx)
+          }
+          const start = dragRef.current
+          if (!start) return
+          if (st.tool === "pan" && st.data) {
+            const t0 = timeAtClientX(plot, start.clientX0)
+            const t1 = timeAtClientX(plot, ev.clientX)
+            start.panAcc += (t0 - t1) * st.data.samplingRate
+            start.clientX0 = ev.clientX
+            const step = start.panAcc > 0 ? Math.floor(start.panAcc) : Math.ceil(start.panAcc)
+            if (step !== 0) {
+              start.panAcc -= step
+              st.setView(panRange(st.view, step, st.data.sampleCount), false)
+            }
+            return
+          }
+          if (st.tool === "box") setSelectX(plot, start.plotX0, plotX(plot, ev.clientX))
+        },
+        { signal, capture: true },
+      )
+
+      hit.addEventListener(
+        "pointerup",
+        (ev: PointerEvent) => {
+          const start = dragRef.current
+          endDrag()
+          if (!start) return
+          const st = useWaveformStore.getState()
+          if (st.tool !== "box") return
+          const t0 = plot.posToVal(start.plotX0, "x")
+          const t1 = timeAtClientX(plot, ev.clientX)
+          if (Math.abs(plotX(plot, ev.clientX) - start.plotX0) > 4) {
+            st.setView(rangeFromTimes(t0, t1, fs, n))
+          }
+        },
+        { signal, capture: true },
+      )
+
+      hit.addEventListener("pointercancel", endDrag, { signal, capture: true })
+      hit.addEventListener(
+        "pointerleave",
+        () => {
+          if (dragRef.current) return
+          useWaveformStore.getState().setHoverIndex(null)
+        },
+        { signal },
+      )
+      hit.addEventListener(
+        "wheel",
+        (ev: WheelEvent) => {
+          if (!ev.ctrlKey) return
+          ev.preventDefault()
+          const st = useWaveformStore.getState()
+          const min = plot.scales.x.min
+          const max = plot.scales.x.max
+          if (min == null || max == null || max === min) return
+          const frac = (timeAtClientX(plot, ev.clientX) - min) / (max - min)
+          st.setView(zoomAt(st.view, frac, ev.deltaY > 0 ? 1.2 : 0.8, n))
+        },
+        { signal, passive: false },
+      )
+    }
+
+    const draw = () => {
+      const w = Math.max(32, el.clientWidth)
+      const h = Math.max(32, el.clientHeight)
+      const model = buildChartModel(data, group, visible, view.i0, view.i1, w, yFollow, scheme)
+      const key = `${scheme}|${model.traces.map((t) => `${t.id}:${t.color}`).join("|")}`
+      const aligned = toAligned(model)
+      let plot = plotRef.current
+      if (!plot || seriesKeyRef.current !== key) {
+        eventsRef.current?.abort()
+        flushSync(() => setOver(null))
+        plot?.destroy()
+        plot = new uPlot(uplotOptions(model, scheme, w, h), aligned, el)
+        plotRef.current = plot
+        seriesKeyRef.current = key
+        setOver(plot.over)
+      } else {
+        plot.setSize({ width: w, height: h })
+        plot.setData(aligned, false)
+        plot.setScale("x", { min: model.xMin, max: model.xMax })
+        if (model.yMin != null && model.yMax != null) plot.setScale("y", { min: model.yMin, max: model.yMax })
+        else plot.redraw()
+      }
+      attach(plot)
+      setPlotGen((n) => n + 1)
+    }
+
+    draw()
+    const ro = new ResizeObserver(draw)
     ro.observe(el)
     return () => {
       ro.disconnect()
-      chart.dispose()
-      chartRef.current = null
+      eventsRef.current?.abort()
+    }
+  }, [data, group, view, visible, yFollow, idsKey, scheme])
+
+  useEffect(() => {
+    return () => {
+      eventsRef.current?.abort()
+      setOver(null)
+      plotRef.current?.destroy()
+      plotRef.current = null
+      seriesKeyRef.current = ""
     }
   }, [group])
 
   useEffect(() => {
-    const chart = chartRef.current
-    const el = canvasRef.current
-    if (!chart || !el) return
-    const model = buildChartModel(data, group, visible, view.i0, view.i1, el.clientWidth || 320, yFollow, scheme)
-    chart.setOption(chartOption(model, scheme), { notMerge: true, lazyUpdate: true })
-  }, [data, group, view, visible, yFollow, idsKey, scheme])
+    if (over) over.dataset.tool = tool
+  }, [over, tool])
 
-  useEffect(() => {
-    const el = overlayRef.current
-    if (!el) return
-
-    const fracOf = (clientX: number) => {
-      const r = el.getBoundingClientRect()
-      return Math.min(1, Math.max(0, (clientX - r.left) / Math.max(1, r.width)))
-    }
-
-    const endDrag = () => {
-      dragRef.current = null
-      setBox(null)
-    }
-
-    const onDown = (ev: PointerEvent) => {
-      if (ev.button !== 0) return
-      ev.preventDefault()
-      const f = fracOf(ev.clientX)
-      const st = useWaveformStore.getState()
-      const drag: Drag = { clientX0: ev.clientX, fracX0: f, panAcc: 0, cursorTarget: null }
-      if (st.data) st.setHoverIndex(indexAtFrac(st.view, f))
-      if (st.tool === "pan") st.snapshotView()
-      if (st.tool === "cursor") {
-        const idx = indexAtFrac(st.view, f)
-        drag.cursorTarget = pickCursorTarget(st.cursorA, st.cursorB, idx)
-        if (drag.cursorTarget === "A") st.setCursorA(idx)
-        else st.setCursorB(idx)
-        st.setHoverIndex(idx)
-      }
-      dragRef.current = drag
-      try {
-        el.setPointerCapture(ev.pointerId)
-      } catch {
-        /* already captured */
-      }
-    }
-
-    const onMove = (ev: PointerEvent) => {
-      const st = useWaveformStore.getState()
-      const f = fracOf(ev.clientX)
-      if (st.data) {
-        const idx = indexAtFrac(st.view, f)
-        st.setHoverIndex(idx)
-        const start = dragRef.current
-        if (st.tool === "cursor" && start?.cursorTarget === "A") st.setCursorA(idx)
-        else if (st.tool === "cursor" && start?.cursorTarget === "B") st.setCursorB(idx)
-      }
-
-      const start = dragRef.current
-      if (!start) return
-
-      if (st.tool === "pan" && st.data) {
-        const r = el.getBoundingClientRect()
-        const span = Math.max(1, st.view.i1 - st.view.i0)
-        start.panAcc += ((start.clientX0 - ev.clientX) / Math.max(1, r.width)) * span
-        start.clientX0 = ev.clientX
-        const step = start.panAcc > 0 ? Math.floor(start.panAcc) : Math.ceil(start.panAcc)
-        if (step !== 0) {
-          start.panAcc -= step
-          st.setView(panRange(st.view, step, st.data.sampleCount), false)
-        }
-        return
-      }
-
-      if (st.tool === "box") {
-        setBox({ left: Math.min(start.fracX0, f), width: Math.abs(f - start.fracX0) })
-      }
-    }
-
-    const onUp = (ev: PointerEvent) => {
-      const start = dragRef.current
-      endDrag()
-      if (!start || !data) return
-      const st = useWaveformStore.getState()
-      const f1 = fracOf(ev.clientX)
-      if (st.tool === "box" && Math.abs(f1 - start.fracX0) > 0.008) {
-        st.setView(boxZoom(st.view, start.fracX0, f1, data.sampleCount))
-      }
-    }
-
-    const onLeave = () => {
-      if (dragRef.current) return
-      useWaveformStore.getState().setHoverIndex(null)
-    }
-
-    const onWheel = (ev: WheelEvent) => {
-      if (!ev.ctrlKey || !data) return
-      ev.preventDefault()
-      const st = useWaveformStore.getState()
-      st.setView(zoomAt(st.view, fracOf(ev.clientX), ev.deltaY > 0 ? 1.2 : 0.8, data.sampleCount))
-    }
-
-    el.addEventListener("pointerdown", onDown)
-    el.addEventListener("pointermove", onMove)
-    el.addEventListener("pointerup", onUp)
-    el.addEventListener("pointercancel", endDrag)
-    el.addEventListener("pointerleave", onLeave)
-    el.addEventListener("wheel", onWheel, { passive: false })
-    return () => {
-      el.removeEventListener("pointerdown", onDown)
-      el.removeEventListener("pointermove", onMove)
-      el.removeEventListener("pointerup", onUp)
-      el.removeEventListener("pointercancel", endDrag)
-      el.removeEventListener("pointerleave", onLeave)
-      el.removeEventListener("wheel", onWheel)
-    }
-  }, [data])
-
-  const dt = 1 / data.samplingRate
-  const t0 = view.i0 * dt
-  const t1 = view.i1 * dt
-  const fracOfIndex = (i: number | null) => {
-    if (i == null || t1 === t0) return null
-    const f = (i * dt - t0) / (t1 - t0)
-    if (f < 0 || f > 1) return null
-    return f
-  }
-
-  const hoverFrac = fracOfIndex(hoverIndex)
-  const hoverPct = hoverFrac == null ? null : `${hoverFrac * 100}%`
-  const aFrac = fracOfIndex(cursorA)
-  const bFrac = fracOfIndex(cursorB)
-  const showHover = hoverPct != null && hoverIndex !== cursorA && hoverIndex !== cursorB
+  const fs = data.samplingRate
+  const plot = plotRef.current
+  const plotW = plot?.over.clientWidth || 1
+  const hoverPx = plot && hoverIndex != null ? posOfSample(plot, hoverIndex, fs) : null
+  const aPx = plot && cursorA != null ? posOfSample(plot, cursorA, fs) : null
+  const bPx = plot && cursorB != null ? posOfSample(plot, cursorB, fs) : null
+  const showHover = hoverPx != null && hoverIndex != null && hoverIndex !== cursorA && hoverIndex !== cursorB
   const groupIds = Object.keys(data.groups[group] ?? {}).filter((id) => visible.has(id))
+
+  const marks =
+    over == null ? null : (
+      <div className="plot-layer">
+        {showHover && hoverIndex != null && hoverPx != null ? (
+          <>
+            <div className="cursor-line cursor-line-follow" style={{ left: hoverPx }} />
+            <ChannelReadouts
+              leftPx={hoverPx}
+              frac={hoverPx / plotW}
+              index={hoverIndex}
+              ids={groupIds}
+              group={group}
+              data={data}
+              scheme={scheme}
+            />
+          </>
+        ) : null}
+        {aPx != null && cursorA != null ? (
+          <>
+            <div className="cursor-line cursor-line-a" style={{ left: aPx }} />
+            <ChannelReadouts
+              leftPx={aPx}
+              frac={aPx / plotW}
+              index={cursorA}
+              ids={groupIds}
+              group={group}
+              data={data}
+              scheme={scheme}
+              tag="A"
+              preferLeft
+            />
+          </>
+        ) : null}
+        {bPx != null && cursorB != null ? (
+          <>
+            <div className="cursor-line cursor-line-b" style={{ left: bPx }} />
+            <ChannelReadouts
+              leftPx={bPx}
+              frac={bPx / plotW}
+              index={cursorB}
+              ids={groupIds}
+              group={group}
+              data={data}
+              scheme={scheme}
+              tag="B"
+            />
+          </>
+        ) : null}
+      </div>
+    )
 
   return (
     <div className="plot-host">
       <div ref={canvasRef} className="plot-canvas" />
-      <div ref={overlayRef} className="plot-overlay" data-tool={tool} />
-      {box ? <div className="box-select" style={{ left: `${box.left * 100}%`, width: `${box.width * 100}%` }} /> : null}
-      {showHover ? <div className="cursor-line cursor-line-follow" style={{ left: hoverPct! }} /> : null}
-      {showHover && hoverIndex != null && hoverPct != null && hoverFrac != null ? (
-        <ChannelReadouts
-          leftPct={hoverPct}
-          frac={hoverFrac}
-          index={hoverIndex}
-          ids={groupIds}
-          group={group}
-          data={data}
-          scheme={scheme}
-        />
-      ) : null}
-      {aFrac != null && cursorA != null ? (
-        <>
-          <div className="cursor-line cursor-line-a" style={{ left: `${aFrac * 100}%` }} />
-          <ChannelReadouts
-            leftPct={`${aFrac * 100}%`}
-            frac={aFrac}
-            index={cursorA}
-            ids={groupIds}
-            group={group}
-            data={data}
-            scheme={scheme}
-            tag="A"
-            preferLeft
-          />
-        </>
-      ) : null}
-      {bFrac != null && cursorB != null ? (
-        <>
-          <div className="cursor-line cursor-line-b" style={{ left: `${bFrac * 100}%` }} />
-          <ChannelReadouts
-            leftPct={`${bFrac * 100}%`}
-            frac={bFrac}
-            index={cursorB}
-            ids={groupIds}
-            group={group}
-            data={data}
-            scheme={scheme}
-            tag="B"
-          />
-        </>
-      ) : null}
+      {over && marks ? createPortal(marks, over) : null}
     </div>
   )
 }

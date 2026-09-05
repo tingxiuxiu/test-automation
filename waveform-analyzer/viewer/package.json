@@ -9,10 +9,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "echarts": "^6.1.0",
     "html-to-image": "^1.11.13",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "uplot": "^1.6.32",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

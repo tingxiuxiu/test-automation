@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest"
 import { columnMinMax, envelopeSeries, minmaxColumns } from "./minmax"
-import { boxZoom, clampRange, fullRange, MIN_VIEW_SAMPLES, panRange, zoomAt } from "./viewRange"
+import {
+  boxZoom,
+  clampRange,
+  fullRange,
+  indexAtTime,
+  MIN_VIEW_SAMPLES,
+  panRange,
+  rangeFromTimes,
+  zoomAt,
+} from "./viewRange"
 import { pairsFromChannels, togglePair, visibleChannelIds } from "./pairs"
 
 describe("minmax envelope", () => {
@@ -45,6 +54,14 @@ describe("viewRange", () => {
   it("zoom at center shrinks span", () => {
     const r = zoomAt({ i0: 0, i1: 199 }, 0.5, 0.5, 200)
     expect(r.i1 - r.i0).toBeLessThan(199)
+  })
+
+  it("maps 12s at 10 kHz to sample 120000", () => {
+    expect(indexAtTime(12, 10_000, 150_000)).toBe(120_000)
+  })
+
+  it("builds a window from two times on the x scale", () => {
+    expect(rangeFromTimes(10, 14, 10_000, 150_000)).toEqual({ i0: 100_000, i1: 140_000 })
   })
 })
 

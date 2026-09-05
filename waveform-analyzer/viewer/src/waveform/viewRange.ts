@@ -55,7 +55,11 @@ export function zoomAt(current: SampleRange, frac: number, factor: number, n: nu
   return clampRange(Math.floor(i0), Math.ceil(i1), n)
 }
 
-export function indexAtFrac(current: SampleRange, frac: number): number {
-  const span = current.i1 - current.i0
-  return current.i0 + Math.round(Math.min(1, Math.max(0, frac)) * span)
+export function indexAtTime(t: number, fs: number, n: number): number {
+  if (n <= 0 || fs <= 0 || !Number.isFinite(t)) return 0
+  return Math.max(0, Math.min(n - 1, Math.round(t * fs)))
+}
+
+export function rangeFromTimes(t0: number, t1: number, fs: number, n: number): SampleRange {
+  return clampRange(indexAtTime(t0, fs, n), indexAtTime(t1, fs, n), n)
 }
