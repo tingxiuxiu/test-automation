@@ -114,3 +114,15 @@ cd waveform-analyzer/viewer && npm test && npm run build
 **改动：** `chartModel.ts`、`echartsOption.ts`、`ChartGroup.tsx`；删除 `UPlotGroup.tsx`；依赖 `echarts` 替换 `uplot`。
 
 **验收：** Vitest 16 · Python 10 · 三图 `_echarts_instance_` 存在。产物约 699 kB（gzip 235 kB），Allure 内联会变大。
+
+---
+
+## 通道命名 + timeline X 轴（2026-09-09）
+
+**目标：** 电压/电流统一为 `Va,Vb,Vc` / `Ia,Ib,Ic`；JSON 增加 `timeline`，X 轴与游标时间用它标注。
+
+**契约：** `timeline` 为 `{t0,dt,unit}`（默认 `dt=1/fs`）或逐点数组。Python `build_waveform_document` 始终写出；viewer `parseTimeline` 后 `timeAt` 驱动 uPlot X、框选/平移/游标。
+
+**改动：** `contract/waveform.schema.json`；`python/waveform_report/stats.py`；viewer `types.ts` / `timeline.ts` / `chartModel.ts` / `ChartGroup.tsx` / `CursorPanel.tsx`；`sample.json` 重生。
+
+**验收：** Vitest 21 · Python 11。浏览器图例 Va/Vb/Vc、Ia/Ib/Ic；X 轴 0–15 s；游标 A/B 时间为 `index * dt`。

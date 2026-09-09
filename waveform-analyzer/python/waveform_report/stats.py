@@ -5,6 +5,9 @@ from typing import Any
 import numpy as np
 
 NAN_RATIO_LIMIT = 0.001
+VOLTAGE_IDS = ("Va", "Vb", "Vc")
+CURRENT_IDS = ("Ia", "Ib", "Ic")
+META_KEYS = {"sampleCount", "samplingRate", "units", "channels", "warnings", "stats", "timeline"}
 
 
 def valid(x: np.ndarray) -> np.ndarray:
@@ -69,21 +72,26 @@ def nan_ratio(values: list[float | None] | np.ndarray, expected: int) -> float:
 
 def default_channels() -> list[dict[str, str | None]]:
     return [
-        {"id": "Uu", "group": "voltage", "pairId": "phase-U", "unit": "V"},
-        {"id": "Vv", "group": "voltage", "pairId": "phase-V", "unit": "V"},
-        {"id": "Ww", "group": "voltage", "pairId": "phase-W", "unit": "V"},
-        {"id": "Iu", "group": "current", "pairId": "phase-U", "unit": "A"},
-        {"id": "Iv", "group": "current", "pairId": "phase-V", "unit": "A"},
-        {"id": "Iw", "group": "current", "pairId": "phase-W", "unit": "A"},
+        {"id": "Va", "group": "voltage", "pairId": "phase-A", "unit": "V"},
+        {"id": "Vb", "group": "voltage", "pairId": "phase-B", "unit": "V"},
+        {"id": "Vc", "group": "voltage", "pairId": "phase-C", "unit": "V"},
+        {"id": "Ia", "group": "current", "pairId": "phase-A", "unit": "A"},
+        {"id": "Ib", "group": "current", "pairId": "phase-B", "unit": "A"},
+        {"id": "Ic", "group": "current", "pairId": "phase-C", "unit": "A"},
         {"id": "speed", "group": "motor", "pairId": None, "unit": "rpm"},
         {"id": "load", "group": "motor", "pairId": None, "unit": "%"},
     ]
 
 
+def default_timeline(_sample_count: int, sampling_rate: float, t0: float = 0.0) -> dict[str, float | str]:
+    dt = 1.0 / float(sampling_rate) if sampling_rate else 1.0
+    return {"t0": float(t0), "dt": dt, "unit": "s"}
+
+
 def iter_series(payload: dict[str, Any]) -> list[tuple[str, str, list]]:
     out: list[tuple[str, str, list]] = []
     for group in payload:
-        if group in {"sampleCount", "samplingRate", "units", "channels", "warnings", "stats"}:
+        if group in META_KEYS:
             continue
         block = payload.get(group)
         if not isinstance(block, dict):
@@ -101,10 +109,12 @@ def build_waveform_document(
     groups: dict[str, dict[str, list]],
     units: dict[str, str] | None = None,
     channels: list[dict[str, str | None]] | None = None,
+    timeline: list[float] | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "sampleCount": int(sample_count),
         "samplingRate": float(sampling_rate),
+        "timeline": timeline if timeline is not None else default_timeline(sample_count, sampling_rate),
         "units": units
         or {"voltage": "V", "current": "A", "speed": "rpm", "load": "%"},
         "channels": channels or default_channels(),
@@ -134,9 +144,9 @@ def build_waveform_document(
         st = channel_stats(sliced)
         full[ch_id] = st
         too_many_missing = nan_ratio(sliced, sample_count) > NAN_RATIO_LIMIT
-        if group == "voltage" and ch_id in {"Uu", "Vv", "Ww"}:
+        if group == "voltage" and ch_id in VOLTAGE_IDS:
             voltage_rms.append(None if too_many_missing else st["rms"])
-        if group == "current" and ch_id in {"Iu", "Iv", "Iw"}:
+        if group == "current" and ch_id in CURRENT_IDS:
             current_rms.append(None if too_many_missing else st["rms"])
 
     full["voltageImbalance"] = imbalance_percent(voltage_rms)

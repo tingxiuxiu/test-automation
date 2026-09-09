@@ -16,7 +16,7 @@ describe("minmax envelope", () => {
   it("keeps a single spike in the bucket max", () => {
     const y = new Float64Array(2000)
     y[500] = 100
-    const cols = minmaxColumns(0, 1999, 10, 1)
+    const cols = minmaxColumns(0, 1999, 10, (i) => i)
     const { max } = envelopeSeries(y, cols)
     expect(Math.max(...max.filter(Number.isFinite))).toBe(100)
     const col = cols.find((c) => c.start <= 500 && c.end >= 500)!
@@ -66,16 +66,16 @@ describe("viewRange", () => {
 })
 
 describe("pairs", () => {
-  it("hides both Uu and Iu together", () => {
+  it("hides both Va and Ia together", () => {
     const pairs = pairsFromChannels([
-      { id: "Uu", group: "voltage", pairId: "phase-U" },
-      { id: "Iu", group: "current", pairId: "phase-U" },
+      { id: "Va", group: "voltage", pairId: "phase-A" },
+      { id: "Ia", group: "current", pairId: "phase-A" },
       { id: "speed", group: "motor" },
     ])
-    const hidden = togglePair(new Set(), "phase-U")
+    const hidden = togglePair(new Set(), "phase-A")
     const vis = visibleChannelIds(pairs, hidden)
-    expect(vis.has("Uu")).toBe(false)
-    expect(vis.has("Iu")).toBe(false)
+    expect(vis.has("Va")).toBe(false)
+    expect(vis.has("Ia")).toBe(false)
     expect(vis.has("speed")).toBe(true)
   })
 })

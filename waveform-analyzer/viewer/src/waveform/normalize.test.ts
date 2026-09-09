@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { channelStats, imbalancePercent } from "./stats"
 import { normalizeWaveform } from "./normalize"
+import { timeAt } from "./timeline"
 
 describe("channelStats", () => {
   it("skips NaN and matches hand RMS", () => {
@@ -26,10 +27,11 @@ describe("normalizeWaveform", () => {
     const n = normalizeWaveform({
       sampleCount: 4,
       samplingRate: 1000,
-      voltage: { Uu: [1, 2] },
+      voltage: { Va: [1, 2] },
     })
-    expect(Array.from(n.groups.voltage.Uu)).toEqual([1, 2, Number.NaN, Number.NaN])
-    expect(n.groups.voltage.Uu[2]).not.toBe(0)
-    expect(n.warnings.some((w) => w.channel === "Uu" && w.actual === 2)).toBe(true)
+    expect(Array.from(n.groups.voltage.Va)).toEqual([1, 2, Number.NaN, Number.NaN])
+    expect(n.groups.voltage.Va[2]).not.toBe(0)
+    expect(n.warnings.some((w) => w.channel === "Va" && w.actual === 2)).toBe(true)
+    expect(timeAt(n.timeline, 1)).toBeCloseTo(0.001)
   })
 })

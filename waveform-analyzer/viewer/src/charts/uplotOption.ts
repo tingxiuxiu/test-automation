@@ -1,6 +1,7 @@
 import uPlot from "uplot"
 import type { ChartModel } from "./chartModel"
 import type { ColorScheme } from "../theme"
+import { formatAxisTime } from "../waveform/timeline"
 
 const CHROME: Record<ColorScheme, { label: string; axis: string; grid: string }> = {
   dark: { label: "#86868b", axis: "#3a3a3c", grid: "#2c2c2e" },
@@ -20,7 +21,13 @@ export function toAligned(model: ChartModel): uPlot.AlignedData {
   return [xs, ...model.traces.map((t) => t.points.map((p) => p[1]))]
 }
 
-export function uplotOptions(model: ChartModel, scheme: ColorScheme, width: number, height: number): uPlot.Options {
+export function uplotOptions(
+  model: ChartModel,
+  scheme: ColorScheme,
+  width: number,
+  height: number,
+  xUnit = "s",
+): uPlot.Options {
   const chrome = CHROME[scheme]
   const traces = model.traces
   const yMin = model.yMin
@@ -47,7 +54,7 @@ export function uplotOptions(model: ChartModel, scheme: ColorScheme, width: numb
       {
         ...axis,
         size: 28,
-        values: (_u, vals) => vals.map((v) => Number(v).toPrecision(4)),
+        values: (_u, vals) => vals.map((v) => formatAxisTime(v, xUnit)),
       },
       {
         ...axis,
@@ -82,9 +89,8 @@ export function posAtTime(plot: uPlot, t: number): number {
   return plot.valToPos(t, "x")
 }
 
-export function posOfSample(plot: uPlot, index: number, fs: number): number | null {
-  if (fs <= 0) return null
-  const px = posAtTime(plot, index / fs)
+export function posOfSample(plot: uPlot, t: number): number | null {
+  const px = posAtTime(plot, t)
   const w = plot.over.clientWidth
   if (!Number.isFinite(px) || px < 0 || px > w) return null
   return px

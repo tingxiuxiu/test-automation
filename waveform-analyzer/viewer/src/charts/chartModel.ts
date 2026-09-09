@@ -2,6 +2,7 @@ import { envelopeSeries, minmaxColumns } from "../waveform/minmax"
 import { seriesYRange } from "../waveform/yRange"
 import { channelColor, type ColorScheme } from "../theme"
 import type { NormalizedWaveform } from "../waveform/normalize"
+import { timeAt } from "../waveform/timeline"
 
 export type ChartPoint = [number, number | null]
 
@@ -36,8 +37,7 @@ export function buildChartModel(
   const block = data.groups[group] ?? {}
   const ids = Object.keys(block).filter((id) => visible.has(id))
   const buckets = Math.max(64, width * 2)
-  const dt = 1 / data.samplingRate
-  const cols = minmaxColumns(i0, i1, buckets, dt)
+  const cols = minmaxColumns(i0, i1, buckets, (i) => timeAt(data.timeline, i))
   const x = cols.map((c) => c.x)
   const traces: ChartTrace[] = []
   const ys: Float64Array[] = []
@@ -59,12 +59,13 @@ export function buildChartModel(
   })
 
   const yr = seriesYRange(ys, { i0, i1 }, yFollow)
-  const xMin = x[0] ?? i0 * dt
-  const xMax = x[x.length - 1] ?? i1 * dt
+  const xMin = x[0] ?? timeAt(data.timeline, i0)
+  const xMax = x[x.length - 1] ?? timeAt(data.timeline, i1)
+  const pad = xMax === xMin ? (data.samplingRate > 0 ? 1 / data.samplingRate : 1) : 0
   return {
     traces,
     xMin,
-    xMax: xMax === xMin ? xMin + dt : xMax,
+    xMax: xMax === xMin ? xMin + pad : xMax,
     yMin: yr?.min ?? null,
     yMax: yr?.max ?? null,
   }

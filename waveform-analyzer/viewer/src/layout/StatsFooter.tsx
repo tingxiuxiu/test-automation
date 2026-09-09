@@ -56,7 +56,7 @@ export function StatsFooter({
             <strong>频率</strong> {samplingRate?.toLocaleString() ?? "—"} Hz
           </span>
           <span>
-            <strong>Uu RMS</strong> {fmt(getSt("Uu")?.rms)} V
+            <strong>Va RMS</strong> {fmt(getSt("Va")?.rms)} V
           </span>
           <span>
             <strong>电压不平衡</strong> {fmt(voltageImb)}%

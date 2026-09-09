@@ -37,19 +37,19 @@ def test_inverter_steady_drive_meets_spec(waveform_teardown):
         assert not doc["warnings"], doc["warnings"]
 
     full = doc["stats"]["full"]
-    uu = full["Uu"]
+    va = full["Va"]
     speed = full["speed"]
     u_imb = full["voltageImbalance"]
 
-    with allure.step("判定规格：Uu RMS 210–230 V，电压不平衡 < 2%，转速 2800–3000 rpm"):
+    with allure.step("判定规格：Va RMS 210–230 V，电压不平衡 < 2%，转速 2800–3000 rpm"):
         summary = (
-            f"Uu RMS = {uu['rms']:.2f} V  (规格 210–230)\n"
+            f"Va RMS = {va['rms']:.2f} V  (规格 210–230)\n"
             f"电压不平衡 = {u_imb:.3f} %  (规格 < 2)\n"
             f"转速均值 = {speed['average']:.1f} rpm  (规格 2800–3000)\n"
-            f"Uu Peak = {uu['peak']:.1f} V\n"
+            f"Va Peak = {va['peak']:.1f} V\n"
             f"采样 = {N} 点 · {FS:.0f} Hz\n"
         )
         allure.attach(summary, name="判定摘要", attachment_type=allure.attachment_type.TEXT)
-        assert uu["rms"] is not None and 210.0 <= uu["rms"] <= 230.0
+        assert va["rms"] is not None and 210.0 <= va["rms"] <= 230.0
         assert u_imb is not None and u_imb < 2.0
         assert speed["average"] is not None and 2800.0 <= speed["average"] <= 3000.0

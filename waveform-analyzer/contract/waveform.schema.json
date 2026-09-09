@@ -8,6 +8,21 @@
   "properties": {
     "sampleCount": { "type": "integer", "minimum": 1 },
     "samplingRate": { "type": "number", "exclusiveMinimum": 0 },
+    "timeline": {
+      "description": "X-axis time. Uniform {t0,dt,unit} or per-sample seconds array.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["t0", "dt"],
+          "properties": {
+            "t0": { "type": "number" },
+            "dt": { "type": "number", "exclusiveMinimum": 0 },
+            "unit": { "type": "string" }
+          }
+        },
+        { "type": "array", "items": { "type": ["number", "null"] } }
+      ]
+    },
     "units": {
       "type": "object",
       "additionalProperties": { "type": "string" }

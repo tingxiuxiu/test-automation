@@ -12,6 +12,7 @@ import { AppBar } from "./AppBar"
 import { ChannelPanel } from "./ChannelPanel"
 import { CursorPanel } from "./CursorPanel"
 import { StatsFooter } from "./StatsFooter"
+import { timeAt, timelineUnit } from "../waveform/timeline"
 
 function dataUrlFromQuery(): string {
   const src = new URLSearchParams(window.location.search).get("src")
@@ -94,7 +95,6 @@ export function WaveformPage() {
     return ordered
   }, [data, embedded])
 
-  const dt = data ? 1 / data.samplingRate : 0
   const aVals = data && cursorA != null ? sampleAt(data.groups, cursorA) : {}
   const bVals = data && cursorB != null ? sampleAt(data.groups, cursorB) : {}
   const voltageImb = win ? win.voltageImbalance : (data?.statsFull.voltageImbalance as number | null | undefined)
@@ -114,7 +114,8 @@ export function WaveformPage() {
   const channelPanel = <ChannelPanel pairs={pairs} hiddenPairs={hiddenPairs} onToggle={togglePair} />
   const cursorPanel = (
     <CursorPanel
-      dt={dt}
+      timeAt={(i) => (data ? timeAt(data.timeline, i) : 0)}
+      unit={data ? timelineUnit(data.timeline) : "s"}
       cursorA={cursorA}
       cursorB={cursorB}
       channels={data?.channels ?? []}

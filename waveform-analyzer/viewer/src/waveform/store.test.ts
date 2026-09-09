@@ -8,7 +8,7 @@ describe("store view history", () => {
     const data = normalizeWaveform({
       sampleCount: 100,
       samplingRate: 1000,
-      voltage: { Uu: Array.from({ length: 100 }, (_, i) => i) },
+      voltage: { Va: Array.from({ length: 100 }, (_, i) => i) },
     })
     useWaveformStore.getState().setData(data)
     const full = useWaveformStore.getState().view

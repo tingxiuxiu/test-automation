@@ -1,6 +1,11 @@
 export type MinmaxColumn = { start: number; end: number; x: number }
 
-export function minmaxColumns(i0: number, i1: number, buckets: number, dt: number): MinmaxColumn[] {
+export function minmaxColumns(
+  i0: number,
+  i1: number,
+  buckets: number,
+  xAt: (index: number) => number,
+): MinmaxColumn[] {
   const start = Math.min(i0, i1)
   const end = Math.max(i0, i1)
   const span = end - start + 1
@@ -10,7 +15,7 @@ export function minmaxColumns(i0: number, i1: number, buckets: number, dt: numbe
     const a = start + Math.floor((k * span) / b)
     const c = start + Math.floor(((k + 1) * span) / b) - 1
     const hi = Math.max(a, c)
-    cols.push({ start: a, end: hi, x: ((a + hi) / 2) * dt })
+    cols.push({ start: a, end: hi, x: xAt((a + hi) / 2) })
   }
   return cols
 }

@@ -36,7 +36,7 @@ def mock_steady_drive(*, n: int = 10_000, fs: float = 10_000.0, seed: int = 7) -
         return np.round(arr, 3).tolist()
 
     return {
-        "voltage": {"Uu": pack(uu), "Vv": pack(vv), "Ww": pack(ww)},
-        "current": {"Iu": pack(iu), "Iv": pack(iv), "Iw": pack(iw)},
+        "voltage": {"Va": pack(uu), "Vb": pack(vv), "Vc": pack(ww)},
+        "current": {"Ia": pack(iu), "Ib": pack(iv), "Ic": pack(iw)},
         "motor": {"speed": pack(speed), "load": pack(load)},
     }

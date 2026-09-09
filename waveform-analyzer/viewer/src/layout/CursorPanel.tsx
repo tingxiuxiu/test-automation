@@ -35,7 +35,8 @@ function groupRows(channels: ChannelMeta[], ids: string[]) {
 type MarkerProps = {
   mark: "A" | "B"
   index: number | null
-  dt: number
+  timeAt: (index: number) => number
+  unit: string
   onClear: () => void
 }
 
@@ -51,7 +52,7 @@ function fmtHz(hz: number): string {
   return `${hz.toFixed(2)} Hz`
 }
 
-function CursorMarker({ mark, index, dt, onClear }: MarkerProps) {
+function CursorMarker({ mark, index, timeAt, unit, onClear }: MarkerProps) {
   return (
     <div className="cursor-mark" data-mark={mark}>
       <span className="cursor-badge" aria-hidden="true">
@@ -62,7 +63,9 @@ function CursorMarker({ mark, index, dt, onClear }: MarkerProps) {
           <span className="cursor-mark-empty">点击波形放置</span>
         ) : (
           <>
-            <span className="cursor-mark-time">{(index * dt).toFixed(4)} s</span>
+            <span className="cursor-mark-time">
+              {timeAt(index).toFixed(4)} {unit}
+            </span>
             <span className="cursor-mark-index">#{index.toLocaleString()}</span>
           </>
         )}
@@ -75,7 +78,8 @@ function CursorMarker({ mark, index, dt, onClear }: MarkerProps) {
 }
 
 type Props = {
-  dt: number
+  timeAt: (index: number) => number
+  unit: string
   cursorA: number | null
   cursorB: number | null
   channels: ChannelMeta[]
@@ -85,20 +89,21 @@ type Props = {
   onClearB: () => void
 }
 
-export function CursorPanel({ dt, cursorA, cursorB, channels, aVals, bVals, onClearA, onClearB }: Props) {
+export function CursorPanel({ timeAt, unit, cursorA, cursorB, channels, aVals, bVals, onClearA, onClearB }: Props) {
   const scheme = useWaveformStore((s) => s.scheme)
   const ids = Object.keys({ ...aVals, ...bVals })
   const sections = groupRows(channels, ids)
   const ready = cursorA != null && cursorB != null
   const sampleSpan = ready ? Math.abs(cursorB - cursorA) : 0
-  const deltaMs = ready ? sampleSpan * dt * 1000 : 0
-  const hz = ready && sampleSpan > 0 ? 1 / (sampleSpan * dt) : null
+  const deltaS = ready ? Math.abs(timeAt(cursorB) - timeAt(cursorA)) : 0
+  const deltaMs = deltaS * 1000
+  const hz = ready && deltaS > 0 ? 1 / deltaS : null
 
   return (
     <div className="cursor-panel">
       <div className="cursor-marks">
-        <CursorMarker mark="A" index={cursorA} dt={dt} onClear={onClearA} />
-        <CursorMarker mark="B" index={cursorB} dt={dt} onClear={onClearB} />
+        <CursorMarker mark="A" index={cursorA} timeAt={timeAt} unit={unit} onClear={onClearA} />
+        <CursorMarker mark="B" index={cursorB} timeAt={timeAt} unit={unit} onClear={onClearB} />
       </div>
 
       <div className="cursor-delta" data-ready={ready}>

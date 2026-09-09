@@ -20,7 +20,7 @@ def test_render_html_inlines_payload_and_600px(tmp_path: Path):
     doc = build_waveform_document(
         sample_count=2,
         sampling_rate=1000,
-        groups={"voltage": {"Uu": [1.0, 2.0]}},
+        groups={"voltage": {"Va": [1.0, 2.0]}},
     )
     html = render_embedded_html(doc, dist)
     assert "window.__WAVEFORM__" in html
@@ -35,7 +35,7 @@ def test_render_uses_built_viewer_when_present():
     dist = Path(__file__).resolve().parents[2] / "viewer" / "dist"
     if not (dist / "index.html").is_file():
         return
-    doc = {"sampleCount": 2, "samplingRate": 1000, "voltage": {"Uu": [1.0, 2.0]}}
+    doc = {"sampleCount": 2, "samplingRate": 1000, "voltage": {"Va": [1.0, 2.0]}}
     html = render_embedded_html(doc, dist)
     assert "window.__WAVEFORM__" in html
     assert "<script type='module'>" in html
@@ -50,10 +50,10 @@ def test_short_channel_warning_message_has_lengths():
     doc = build_waveform_document(
         sample_count=4,
         sampling_rate=1000,
-        groups={"voltage": {"Uu": [1.0, 2.0]}},
+        groups={"voltage": {"Va": [1.0, 2.0]}},
     )
     w = doc["warnings"][0]
-    assert w["channel"] == "Uu"
+    assert w["channel"] == "Va"
     assert w["expected"] == 4
     assert w["actual"] == 2
     assert json.dumps(doc)

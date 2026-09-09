@@ -1,7 +1,8 @@
 import { DEFAULT_CHANNELS, type LengthWarning, type WaveformJson } from "./types"
 import { channelStats, imbalancePercent, nanRatio, NAN_RATIO_LIMIT } from "./stats"
+import { parseTimeline, type Timeline } from "./timeline"
 
-const META = new Set(["sampleCount", "samplingRate", "units", "channels", "warnings", "stats"])
+const META = new Set(["sampleCount", "samplingRate", "units", "channels", "warnings", "stats", "timeline"])
 
 export type SeriesMap = Record<string, Record<string, Float64Array>>
 
@@ -14,6 +15,7 @@ export type NormalizedWaveform = {
   groups: SeriesMap
   durationSeconds: number
   statsFull: Record<string, unknown>
+  timeline: Timeline
 }
 
 export function isGroupBlock(value: unknown): value is Record<string, unknown> {
@@ -63,6 +65,7 @@ export function normalizeWaveform(raw: WaveformJson): NormalizedWaveform {
     groups,
     durationSeconds: sampleCount > 1 ? (sampleCount - 1) / samplingRate : 0,
     statsFull: (raw.stats?.full ?? {}) as Record<string, unknown>,
+    timeline: parseTimeline(raw.timeline, sampleCount, samplingRate),
   }
 }
 

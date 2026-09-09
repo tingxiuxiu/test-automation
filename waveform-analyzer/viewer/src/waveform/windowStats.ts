@@ -1,4 +1,4 @@
-import type { ChannelStats } from "./types"
+import { CURRENT_IDS, VOLTAGE_IDS, type ChannelStats } from "./types"
 import { channelStats, imbalancePercent, NAN_RATIO_LIMIT } from "./stats"
 import type { SeriesMap } from "./normalize"
 
@@ -29,8 +29,8 @@ export function computeWindowStats(groups: SeriesMap, i0: number, i1: number): W
       const st = channelStats(slice)
       channels[id] = st
       const missing = nanRatioSlice(y, a, b) > NAN_RATIO_LIMIT
-      if (group === "voltage" && ["Uu", "Vv", "Ww"].includes(id)) vRms.push(missing ? null : st.rms)
-      if (group === "current" && ["Iu", "Iv", "Iw"].includes(id)) iRms.push(missing ? null : st.rms)
+      if (group === "voltage" && (VOLTAGE_IDS as readonly string[]).includes(id)) vRms.push(missing ? null : st.rms)
+      if (group === "current" && (CURRENT_IDS as readonly string[]).includes(id)) iRms.push(missing ? null : st.rms)
     }
   }
   return {

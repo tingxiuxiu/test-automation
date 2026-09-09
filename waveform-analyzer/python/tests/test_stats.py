@@ -29,12 +29,24 @@ def test_build_keeps_short_array_and_warns():
     doc = build_waveform_document(
         sample_count=4,
         sampling_rate=1000.0,
-        groups={"voltage": {"Uu": [1.0, 2.0], "Vv": [1.0, 1.0, 1.0, 1.0], "Ww": [1.0, 1.0, 1.0, 1.0]}},
+        groups={"voltage": {"Va": [1.0, 2.0], "Vb": [1.0, 1.0, 1.0, 1.0], "Vc": [1.0, 1.0, 1.0, 1.0]}},
     )
-    assert doc["voltage"]["Uu"] == [1.0, 2.0]
-    assert any(w["channel"] == "Uu" and w["actual"] == 2 for w in doc["warnings"])
-    assert doc["stats"]["full"]["Uu"]["peak"] == 2.0
+    assert doc["voltage"]["Va"] == [1.0, 2.0]
+    assert any(w["channel"] == "Va" and w["actual"] == 2 for w in doc["warnings"])
+    assert doc["stats"]["full"]["Va"]["peak"] == 2.0
     assert doc["stats"]["full"]["voltageImbalance"] is None
+    assert doc["timeline"] == {"t0": 0.0, "dt": 0.001, "unit": "s"}
+
+
+def test_build_keeps_explicit_timeline_array():
+    times = [10.0, 10.1, 10.2, 10.3]
+    doc = build_waveform_document(
+        sample_count=4,
+        sampling_rate=10.0,
+        groups={"voltage": {"Va": [1.0, 1.0, 1.0, 1.0]}},
+        timeline=times,
+    )
+    assert doc["timeline"] == times
 
 
 def test_crest_factor_uses_abs_extrema():

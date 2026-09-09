@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react"
 import { createPortal, flushSync } from "react-dom"
 import uPlot from "uplot"
 import "uplot/dist/uPlot.min.css"
-import { indexAtTime, panRange, rangeFromTimes, zoomAt } from "../waveform/viewRange"
+import { clampRange, panRange, zoomAt } from "../waveform/viewRange"
+import { indexOnTimeline, samplesPerUnit, timeAt, timelineUnit } from "../waveform/timeline"
 import { useWaveformStore } from "../waveform/store"
 import type { NormalizedWaveform } from "../waveform/normalize"
 import { buildChartModel } from "./chartModel"
@@ -105,10 +106,11 @@ export function ChartGroup({ group, data, visible }: Props) {
       eventsRef.current = ac
       const { signal } = ac
       const hit = plot.over
-      const fs = data.samplingRate
       const n = data.sampleCount
+      const tl = data.timeline
+      const perUnit = samplesPerUnit(tl, data.samplingRate)
 
-      const idxAt = (clientX: number) => indexAtTime(timeAtClientX(plot, clientX), fs, n)
+      const idxAt = (clientX: number) => indexOnTimeline(timeAtClientX(plot, clientX), tl, n)
 
       const endDrag = () => {
         clearSelect(plot)
@@ -158,7 +160,7 @@ export function ChartGroup({ group, data, visible }: Props) {
           if (st.tool === "pan" && st.data) {
             const t0 = timeAtClientX(plot, start.clientX0)
             const t1 = timeAtClientX(plot, ev.clientX)
-            start.panAcc += (t0 - t1) * st.data.samplingRate
+            start.panAcc += (t0 - t1) * perUnit
             start.clientX0 = ev.clientX
             const step = start.panAcc > 0 ? Math.floor(start.panAcc) : Math.ceil(start.panAcc)
             if (step !== 0) {
@@ -183,7 +185,7 @@ export function ChartGroup({ group, data, visible }: Props) {
           const t0 = plot.posToVal(start.plotX0, "x")
           const t1 = timeAtClientX(plot, ev.clientX)
           if (Math.abs(plotX(plot, ev.clientX) - start.plotX0) > 4) {
-            st.setView(rangeFromTimes(t0, t1, fs, n))
+            st.setView(clampRange(indexOnTimeline(t0, tl, n), indexOnTimeline(t1, tl, n), n))
           }
         },
         { signal, capture: true },
@@ -225,7 +227,7 @@ export function ChartGroup({ group, data, visible }: Props) {
         eventsRef.current?.abort()
         flushSync(() => setOver(null))
         plot?.destroy()
-        plot = new uPlot(uplotOptions(model, scheme, w, h), aligned, el)
+        plot = new uPlot(uplotOptions(model, scheme, w, h, timelineUnit(data.timeline)), aligned, el)
         plotRef.current = plot
         seriesKeyRef.current = key
         setOver(plot.over)
@@ -263,12 +265,12 @@ export function ChartGroup({ group, data, visible }: Props) {
     if (over) over.dataset.tool = tool
   }, [over, tool])
 
-  const fs = data.samplingRate
   const plot = plotRef.current
   const plotW = plot?.over.clientWidth || 1
-  const hoverPx = plot && hoverIndex != null ? posOfSample(plot, hoverIndex, fs) : null
-  const aPx = plot && cursorA != null ? posOfSample(plot, cursorA, fs) : null
-  const bPx = plot && cursorB != null ? posOfSample(plot, cursorB, fs) : null
+  const tOf = (i: number) => timeAt(data.timeline, i)
+  const hoverPx = plot && hoverIndex != null ? posOfSample(plot, tOf(hoverIndex)) : null
+  const aPx = plot && cursorA != null ? posOfSample(plot, tOf(cursorA)) : null
+  const bPx = plot && cursorB != null ? posOfSample(plot, tOf(cursorB)) : null
   const showHover = hoverPx != null && hoverIndex != null && hoverIndex !== cursorA && hoverIndex !== cursorB
   const groupIds = Object.keys(data.groups[group] ?? {}).filter((id) => visible.has(id))
 

@@ -1,17 +1,19 @@
 import { describe, expect, it } from "vitest"
 import { buildChartModel } from "./chartModel"
 import type { NormalizedWaveform } from "../waveform/normalize"
+import { fallbackTimeline } from "../waveform/timeline"
 
 function waveform(y: number[]): NormalizedWaveform {
   return {
     sampleCount: y.length,
     samplingRate: 1000,
     units: {},
-    channels: [{ id: "Uu", group: "voltage" }],
+    channels: [{ id: "Va", group: "voltage" }],
     warnings: [],
-    groups: { voltage: { Uu: Float64Array.from(y) } },
+    groups: { voltage: { Va: Float64Array.from(y) } },
     durationSeconds: y.length / 1000,
     statsFull: {},
+    timeline: fallbackTimeline(1000),
   }
 }
 
@@ -19,10 +21,10 @@ describe("buildChartModel", () => {
   it("keeps a spike in the max envelope trace", () => {
     const y = Array.from({ length: 2000 }, () => 0)
     y[500] = 100
-    const model = buildChartModel(waveform(y), "voltage", new Set(["Uu"]), 0, 1999, 10, false)
+    const model = buildChartModel(waveform(y), "voltage", new Set(["Va"]), 0, 1999, 10, false)
     const maxY = Math.max(...model.traces.flatMap((t) => t.points.map((p) => p[1] ?? -Infinity)))
     expect(maxY).toBe(100)
-    expect(model.traces.some((t) => t.id === "Uu")).toBe(true)
+    expect(model.traces.some((t) => t.id === "Va")).toBe(true)
   })
 
   it("omits hidden channels", () => {
