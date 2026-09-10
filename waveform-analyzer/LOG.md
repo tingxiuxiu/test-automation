@@ -126,3 +126,17 @@ cd waveform-analyzer/viewer && npm test && npm run build
 **改动：** `contract/waveform.schema.json`；`python/waveform_report/stats.py`；viewer `types.ts` / `timeline.ts` / `chartModel.ts` / `ChartGroup.tsx` / `CursorPanel.tsx`；`sample.json` 重生。
 
 **验收：** Vitest 21 · Python 11。浏览器图例 Va/Vb/Vc、Ia/Ib/Ic；X 轴 0–15 s；游标 A/B 时间为 `index * dt`。
+
+---
+
+## Allure 大波形内存（2026-09-10）
+
+**目标：** 1.94e6 点在 `allure open` 下不再把通道数组内联进 HTML；浏览器只留一份全长 TypedArray；平移不再拆 ChartGroup Effect。
+
+**投递：** HTML 只写 `window.__WAVEFORM_SRC__`；JSON 以 `text/plain` 的 `{uuid}-attachment.json` 登记（避免 Allure JSON 预览把 120MB 渲进父页）。viewer `fetch` 后丢掉 `__WAVEFORM__`。
+
+**绘制：** `view` / `hoverIndex` 不再订进 ChartGroup 的 draw Effect；uPlot `setData` 走 store.subscribe；游标层独立 `PlotOverlay`。
+
+**验收：** 新增 `tests/test_large_waveform_report.py` 运行时生成 1.94e6（不入库）。`pytest --alluredir=allure-results` 后 `allure open` 看 Chrome 内存。
+
+**Allure 3 预览：** `allure open`（3.16）用 DOMPurify 剥掉 `<script>`，iframe `sandbox` 无 `allow-scripts`。内嵌预览因此只剩 CSS 黑底。HTML 里放无脚本的 `#waveform-static-hint`；真正交互走用例链接「打开波形分析」、附件「在新标签打开」，或 `allure allure2 allure-results`。sidecar `fetch` 会试 `data/attachments/{uuid}-attachment.json` 以及 opener/referrer 上的同源路径（blob 新标签也能拉到 JSON）。

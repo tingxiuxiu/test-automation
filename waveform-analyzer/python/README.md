@@ -32,6 +32,8 @@ allure open allure-results
 
 Allure 3 可直接 `allure open allure-results`（会现场生成并打开）。若已生成 `allure-report`，也可以 `allure open allure-report`。
 
+Allure 3 的 HTML 附件预览会禁用脚本，内嵌区域只显示说明，不是空白黑页。要点用例链接 **打开波形分析**，或附件 **在新标签打开**，才会跑 React 分析页。若要 teardown 里 600px 内嵌可交互图，用 Classic：`allure allure2 allure-results`。
+
 打开报告后进入用例 **稳态 PWM 驱动**，在 Teardown / 附件中打开 `waveform-analysis`，即可框选、平移、打 A/B 游标。
 
 无 `doc` 则不挂波形附件。需 Allure 时：`uv sync --extra dev --extra allure` 并加 `--alluredir`。

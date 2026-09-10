@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import type { WaveformJson } from "../waveform/types"
 import { normalizeWaveform } from "../waveform/normalize"
 import { useWaveformStore } from "../waveform/store"
 import { pairsFromChannels, visibleChannelIds } from "../waveform/pairs"
@@ -13,11 +12,7 @@ import { ChannelPanel } from "./ChannelPanel"
 import { CursorPanel } from "./CursorPanel"
 import { StatsFooter } from "./StatsFooter"
 import { timeAt, timelineUnit } from "../waveform/timeline"
-
-function dataUrlFromQuery(): string {
-  const src = new URLSearchParams(window.location.search).get("src")
-  return src && src.length > 0 ? src : "./sample.json"
-}
+import { loadWaveformJson } from "../waveform/load"
 
 export function WaveformPage() {
   const data = useWaveformStore((s) => s.data)
@@ -42,14 +37,7 @@ export function WaveformPage() {
   const [pngBusy, setPngBusy] = useState(false)
 
   useEffect(() => {
-    const injected = window.__WAVEFORM__
-    const load = injected
-      ? Promise.resolve(injected)
-      : fetch(dataUrlFromQuery()).then((r) => {
-          if (!r.ok) throw new Error(`${r.status}`)
-          return r.json() as Promise<WaveformJson>
-        })
-    load
+    loadWaveformJson()
       .then((json) => {
         setData(normalizeWaveform(json))
         setError(null)

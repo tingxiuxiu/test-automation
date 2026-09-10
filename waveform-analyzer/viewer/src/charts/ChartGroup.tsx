@@ -78,23 +78,106 @@ function ChannelReadouts({
   )
 }
 
+function PlotOverlay({
+  over,
+  plot,
+  group,
+  data,
+  visible,
+}: {
+  over: HTMLDivElement
+  plot: uPlot
+  group: string
+  data: NormalizedWaveform
+  visible: Set<string>
+}) {
+  const hoverIndex = useWaveformStore((s) => s.hoverIndex)
+  const cursorA = useWaveformStore((s) => s.cursorA)
+  const cursorB = useWaveformStore((s) => s.cursorB)
+  const scheme = useWaveformStore((s) => s.scheme)
+  const view = useWaveformStore((s) => s.view)
+  const plotW = plot.over.clientWidth || 1
+  const tOf = (i: number) => timeAt(data.timeline, i)
+  const hoverPx = hoverIndex != null ? posOfSample(plot, tOf(hoverIndex)) : null
+  const aPx = cursorA != null ? posOfSample(plot, tOf(cursorA)) : null
+  const bPx = cursorB != null ? posOfSample(plot, tOf(cursorB)) : null
+  const showHover = hoverPx != null && hoverIndex != null && hoverIndex !== cursorA && hoverIndex !== cursorB
+  const groupIds = Object.keys(data.groups[group] ?? {}).filter((id) => visible.has(id))
+  void view
+
+  return createPortal(
+    <div className="plot-layer">
+      {showHover && hoverIndex != null && hoverPx != null ? (
+        <>
+          <div className="cursor-line cursor-line-follow" style={{ left: hoverPx }} />
+          <ChannelReadouts
+            leftPx={hoverPx}
+            frac={hoverPx / plotW}
+            index={hoverIndex}
+            ids={groupIds}
+            group={group}
+            data={data}
+            scheme={scheme}
+          />
+        </>
+      ) : null}
+      {aPx != null && cursorA != null ? (
+        <>
+          <div className="cursor-line cursor-line-a" style={{ left: aPx }} />
+          <ChannelReadouts
+            leftPx={aPx}
+            frac={aPx / plotW}
+            index={cursorA}
+            ids={groupIds}
+            group={group}
+            data={data}
+            scheme={scheme}
+            tag="A"
+            preferLeft
+          />
+        </>
+      ) : null}
+      {bPx != null && cursorB != null ? (
+        <>
+          <div className="cursor-line cursor-line-b" style={{ left: bPx }} />
+          <ChannelReadouts
+            leftPx={bPx}
+            frac={bPx / plotW}
+            index={cursorB}
+            ids={groupIds}
+            group={group}
+            data={data}
+            scheme={scheme}
+            tag="B"
+          />
+        </>
+      ) : null}
+    </div>,
+    over,
+  )
+}
+
 export function ChartGroup({ group, data, visible }: Props) {
   const canvasRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   const seriesKeyRef = useRef("")
   const dragRef = useRef<Drag | null>(null)
   const eventsRef = useRef<AbortController | null>(null)
+  const dataRef = useRef(data)
+  const visibleRef = useRef(visible)
+  const yFollowRef = useRef(false)
+  const schemeRef = useRef(useWaveformStore.getState().scheme)
   const [over, setOver] = useState<HTMLDivElement | null>(null)
-  const [, setPlotGen] = useState(0)
 
-  const view = useWaveformStore((s) => s.view)
   const yFollow = useWaveformStore((s) => s.yFollow)
   const tool = useWaveformStore((s) => s.tool)
-  const cursorA = useWaveformStore((s) => s.cursorA)
-  const cursorB = useWaveformStore((s) => s.cursorB)
-  const hoverIndex = useWaveformStore((s) => s.hoverIndex)
   const scheme = useWaveformStore((s) => s.scheme)
   const idsKey = [...visible].sort().join(",")
+
+  dataRef.current = data
+  visibleRef.current = visible
+  yFollowRef.current = yFollow
+  schemeRef.current = scheme
 
   useEffect(() => {
     const el = canvasRef.current
@@ -106,9 +189,9 @@ export function ChartGroup({ group, data, visible }: Props) {
       eventsRef.current = ac
       const { signal } = ac
       const hit = plot.over
-      const n = data.sampleCount
-      const tl = data.timeline
-      const perUnit = samplesPerUnit(tl, data.samplingRate)
+      const n = dataRef.current.sampleCount
+      const tl = dataRef.current.timeline
+      const perUnit = samplesPerUnit(tl, dataRef.current.samplingRate)
 
       const idxAt = (clientX: number) => indexOnTimeline(timeAtClientX(plot, clientX), tl, n)
 
@@ -216,21 +299,26 @@ export function ChartGroup({ group, data, visible }: Props) {
       )
     }
 
-    const draw = () => {
-      const w = Math.max(32, el.clientWidth)
-      const h = Math.max(32, el.clientHeight)
-      const model = buildChartModel(data, group, visible, view.i0, view.i1, w, yFollow, scheme)
-      const key = `${scheme}|${model.traces.map((t) => `${t.id}:${t.color}`).join("|")}`
+    const paint = () => {
+      const host = canvasRef.current
+      const d = dataRef.current
+      if (!host) return
+      const w = Math.max(32, host.clientWidth)
+      const h = Math.max(32, host.clientHeight)
+      const st = useWaveformStore.getState()
+      const model = buildChartModel(d, group, visibleRef.current, st.view.i0, st.view.i1, w, yFollowRef.current, schemeRef.current)
+      const key = `${schemeRef.current}|${model.traces.map((t) => `${t.id}:${t.color}`).join("|")}`
       const aligned = toAligned(model)
       let plot = plotRef.current
       if (!plot || seriesKeyRef.current !== key) {
         eventsRef.current?.abort()
         flushSync(() => setOver(null))
         plot?.destroy()
-        plot = new uPlot(uplotOptions(model, scheme, w, h, timelineUnit(data.timeline)), aligned, el)
+        plot = new uPlot(uplotOptions(model, schemeRef.current, w, h, timelineUnit(d.timeline)), aligned, host)
         plotRef.current = plot
         seriesKeyRef.current = key
         setOver(plot.over)
+        attach(plot)
       } else {
         plot.setSize({ width: w, height: h })
         plot.setData(aligned, false)
@@ -238,18 +326,21 @@ export function ChartGroup({ group, data, visible }: Props) {
         if (model.yMin != null && model.yMax != null) plot.setScale("y", { min: model.yMin, max: model.yMax })
         else plot.redraw()
       }
-      attach(plot)
-      setPlotGen((n) => n + 1)
     }
 
-    draw()
-    const ro = new ResizeObserver(draw)
+    paint()
+    const ro = new ResizeObserver(paint)
     ro.observe(el)
+    const unsub = useWaveformStore.subscribe((s, prev) => {
+      if (s.view === prev.view && s.yFollow === prev.yFollow) return
+      paint()
+    })
     return () => {
+      unsub()
       ro.disconnect()
       eventsRef.current?.abort()
     }
-  }, [data, group, view, visible, yFollow, idsKey, scheme])
+  }, [data, group, idsKey, scheme])
 
   useEffect(() => {
     return () => {
@@ -266,69 +357,11 @@ export function ChartGroup({ group, data, visible }: Props) {
   }, [over, tool])
 
   const plot = plotRef.current
-  const plotW = plot?.over.clientWidth || 1
-  const tOf = (i: number) => timeAt(data.timeline, i)
-  const hoverPx = plot && hoverIndex != null ? posOfSample(plot, tOf(hoverIndex)) : null
-  const aPx = plot && cursorA != null ? posOfSample(plot, tOf(cursorA)) : null
-  const bPx = plot && cursorB != null ? posOfSample(plot, tOf(cursorB)) : null
-  const showHover = hoverPx != null && hoverIndex != null && hoverIndex !== cursorA && hoverIndex !== cursorB
-  const groupIds = Object.keys(data.groups[group] ?? {}).filter((id) => visible.has(id))
-
-  const marks =
-    over == null ? null : (
-      <div className="plot-layer">
-        {showHover && hoverIndex != null && hoverPx != null ? (
-          <>
-            <div className="cursor-line cursor-line-follow" style={{ left: hoverPx }} />
-            <ChannelReadouts
-              leftPx={hoverPx}
-              frac={hoverPx / plotW}
-              index={hoverIndex}
-              ids={groupIds}
-              group={group}
-              data={data}
-              scheme={scheme}
-            />
-          </>
-        ) : null}
-        {aPx != null && cursorA != null ? (
-          <>
-            <div className="cursor-line cursor-line-a" style={{ left: aPx }} />
-            <ChannelReadouts
-              leftPx={aPx}
-              frac={aPx / plotW}
-              index={cursorA}
-              ids={groupIds}
-              group={group}
-              data={data}
-              scheme={scheme}
-              tag="A"
-              preferLeft
-            />
-          </>
-        ) : null}
-        {bPx != null && cursorB != null ? (
-          <>
-            <div className="cursor-line cursor-line-b" style={{ left: bPx }} />
-            <ChannelReadouts
-              leftPx={bPx}
-              frac={bPx / plotW}
-              index={cursorB}
-              ids={groupIds}
-              group={group}
-              data={data}
-              scheme={scheme}
-              tag="B"
-            />
-          </>
-        ) : null}
-      </div>
-    )
 
   return (
     <div className="plot-host">
       <div ref={canvasRef} className="plot-canvas" />
-      {over && marks ? createPortal(marks, over) : null}
+      {over && plot ? <PlotOverlay over={over} plot={plot} group={group} data={data} visible={visible} /> : null}
     </div>
   )
 }
